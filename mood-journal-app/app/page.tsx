@@ -1,13 +1,52 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
-import { collection, addDoc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  orderBy,
+  deleteDoc,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+
+interface Entry {
+  id: string;
+  mood: string;
+  title: string;
+  text: string;
+  createdAt: number;
+}
 
 export default function Home() {
   const [mood, setMood] = useState("😊");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  async function loadEntries() {
+    const q = query(
+      collection(db, "entries"),
+      orderBy("createdAt", "desc")
+    );
+
+    const snapshot = await getDocs(q);
+
+    const data: Entry[] = snapshot.docs.map((docItem) => ({
+      id: docItem.id,
+      ...(docItem.data() as Omit<Entry, "id">),
+    }));
+
+    setEntries(data);
+  }
+
+  useEffect(() => {
+    loadEntries();
+  }, []);
 
   async function saveEntry() {
     if (!title || !text) {
@@ -16,22 +55,60 @@ export default function Home() {
     }
 
     try {
-      await addDoc(collection(db, "entries"), {
-        mood,
-        title,
-        text,
-        createdAt: Date.now(),
-      });
+      if (editingId) {
+        await updateDoc(doc(db, "entries", editingId), {
+          mood,
+          title,
+          text,
+        });
 
-      alert("Zápisek uložen! 🌸");
+        setEditingId(null);
+      } else {
+        await addDoc(collection(db, "entries"), {
+          mood,
+          title,
+          text,
+          createdAt: Date.now(),
+        });
+      }
 
       setTitle("");
       setText("");
       setMood("😊");
+
+      await loadEntries();
     } catch (error) {
       console.error(error);
-      alert("Nepodařilo se uložit zápisek.");
+      alert("Operaci se nepodařilo dokončit.");
     }
+  }
+
+  async function deleteEntry(id: string) {
+    const confirmed = confirm(
+      "Opravdu chceš tento zápisek smazat?"
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteDoc(doc(db, "entries", id));
+      await loadEntries();
+    } catch (error) {
+      console.error(error);
+      alert("Nepodařilo se smazat zápisek.");
+    }
+  }
+
+  function editEntry(entry: Entry) {
+    setEditingId(entry.id);
+    setMood(entry.mood);
+    setTitle(entry.title);
+    setText(entry.text);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   return (
@@ -89,8 +166,57 @@ export default function Home() {
             onClick={saveEntry}
             className="mt-8 w-full bg-pink-500 text-white p-4 rounded-2xl hover:bg-pink-600 transition"
           >
-            Uložit zápisek
+            {editingId
+              ? "💾 Uložit změny"
+              : "🌸 Uložit zápisek"}
           </button>
+        </div>
+
+        <div className="mt-10">
+          <h2 className="text-3xl font-bold text-pink-600 mb-6">
+            📔 Moje zápisky
+          </h2>
+
+          <div className="space-y-4">
+            {entries.map((entry) => (
+              <div
+                key={entry.id}
+                className="bg-white rounded-3xl shadow-lg p-6"
+              >
+                <div className="flex items-center gap-4 mb-3">
+                  <span className="text-4xl">
+                    {entry.mood}
+                  </span>
+
+                  <h3 className="text-2xl font-bold">
+                    {entry.title}
+                  </h3>
+                </div>
+
+                <p className="text-gray-700 whitespace-pre-wrap mb-5">
+                  {entry.text}
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => editEntry(entry)}
+                    className="bg-blue-500 text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition"
+                  >
+                    ✏️ Upravit
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      deleteEntry(entry.id)
+                    }
+                    className="bg-red-500 text-white px-4 py-2 rounded-xl hover:bg-red-600 transition"
+                  >
+                    🗑️ Smazat
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </main>
