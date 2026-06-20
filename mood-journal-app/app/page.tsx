@@ -27,6 +27,7 @@ export default function Home() {
   const [text, setText] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [notification, setNotification] = useState("");
 
   async function loadEntries() {
     const q = query(
@@ -48,13 +49,23 @@ export default function Home() {
     loadEntries();
   }, []);
 
+  function showNotification(message: string) {
+    setNotification(message);
+
+    setTimeout(() => {
+      setNotification("");
+    }, 3000);
+  }
+
   async function saveEntry() {
     if (!title || !text) {
-      alert("Vyplň nadpis i zápisek.");
+      showNotification("Vyplň nadpis i zápisek.");
       return;
     }
 
     try {
+      const wasEditing = !!editingId;
+
       if (editingId) {
         await updateDoc(doc(db, "entries", editingId), {
           mood,
@@ -77,9 +88,15 @@ export default function Home() {
       setMood("😊");
 
       await loadEntries();
+
+      showNotification(
+        wasEditing
+          ? "🩷 Zápisek byl upraven."
+          : "🌸 Zápisek byl uložen."
+      );
     } catch (error) {
       console.error(error);
-      alert("Operaci se nepodařilo dokončit.");
+      showNotification("Něco se nepodařilo.");
     }
   }
 
@@ -93,9 +110,11 @@ export default function Home() {
     try {
       await deleteDoc(doc(db, "entries", id));
       await loadEntries();
+
+      showNotification("🗑️ Zápisek byl smazán.");
     } catch (error) {
       console.error(error);
-      alert("Nepodařilo se smazat zápisek.");
+      showNotification("Nepodařilo se smazat zápisek.");
     }
   }
 
@@ -122,6 +141,12 @@ export default function Home() {
           <p className="text-center text-gray-500 mt-4">
             Jak se dnes cítíš?
           </p>
+
+          {notification && (
+            <div className="mt-4 rounded-2xl border border-pink-300 bg-pink-100 px-4 py-3 text-center text-pink-700 shadow">
+              {notification}
+            </div>
+          )}
 
           <div className="flex justify-center gap-4 text-4xl mt-8">
             <button onClick={() => setMood("😊")}>😊</button>
@@ -188,9 +213,17 @@ export default function Home() {
                     {entry.mood}
                   </span>
 
-                  <h3 className="text-2xl font-bold">
-                    {entry.title}
-                  </h3>
+                  <div>
+                    <h3 className="text-2xl font-bold">
+                      {entry.title}
+                    </h3>
+
+                    <p className="text-sm text-gray-500">
+                      {new Date(
+                        entry.createdAt
+                      ).toLocaleString("cs-CZ")}
+                    </p>
+                  </div>
                 </div>
 
                 <p className="text-gray-700 whitespace-pre-wrap mb-5">
